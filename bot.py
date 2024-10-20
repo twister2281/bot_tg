@@ -120,15 +120,15 @@ async def subject_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return DAY_INPUT
 
     context.user_data['subject'] = subject
-    await update.message.reply_text(f"Предмет {subject} выбран. Введи задание (максимум 45 символов):")
+    await update.message.reply_text(f"Предмет {subject} выбран. Введи задание (максимум  символов):")
     return TASK_INPUT
 
 # Обработка ввода задания
 async def task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task = update.message.text
 
-    if len(task) > 45:
-        await update.message.reply_text("Ошибка: задание не должно превышать 45 символов.")
+    if len(task) > 20:
+        await update.message.reply_text("Ошибка: задание не должно превышать 20 символов.")
         return TASK_INPUT
 
     month_year = context.user_data['month']
@@ -302,15 +302,15 @@ async def edit_subject_selection(update: Update, context: ContextTypes.DEFAULT_T
         return EDIT_DAY_INPUT
 
     context.user_data['edit_subject'] = subject
-    await update.message.reply_text(f"Выбран предмет {subject}. Введи новое задание (максимум 45 символов):")
+    await update.message.reply_text(f"Выбран предмет {subject}. Введи новое задание (максимум 20 символов):")
     return EDIT_TASK_INPUT
 
 # Обработка ввода нового задания для редактирования
 async def edit_task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_task = update.message.text
 
-    if len(new_task) > 45:
-        await update.message.reply_text("Ошибка: задание не должно превышать 45 символов.")
+    if len(new_task) > 20:
+        await update.message.reply_text("Ошибка: задание не должно превышать 20 символов.")
         return EDIT_TASK_INPUT
 
     month_year = context.user_data['edit_month']
