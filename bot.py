@@ -2,6 +2,7 @@ from babel.dates import format_date
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from datetime import datetime, timedelta
+
 # Состояния для команды /add, /edit и /get_homework
 MONTH_SELECTION, DAY_INPUT, SUBJECT_SELECTION, TASK_INPUT, MONTH_REQUEST, DAY_REQUEST, EDIT_MONTH_SELECTION, EDIT_DAY_INPUT, EDIT_SUBJECT_SELECTION, EDIT_TASK_INPUT = range(10)
 DELETE_MONTH_SELECTION, DELETE_DAY_SELECTION, DELETE_SUBJECT_SELECTION = range(10, 13)
@@ -404,6 +405,45 @@ async def delete_subject_selection(update: Update, context: ContextTypes.DEFAULT
     
     await start(update, context)
     return ConversationHandler.END
+
+def get_week_range():
+    now = datetime.now()
+    start_of_week = now - timedelta(days=now.weekday())  # Понедельник текущей недели
+    end_of_week = start_of_week + timedelta(days=6)  # Воскресенье текущей недели
+    return start_of_week, end_of_week
+
+# Функция для отображения домашнего задания на текущую неделю
+async def show_week_homework(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    start_of_week, end_of_week = get_week_range()
+    
+    # Преобразуем даты в нужный формат для отображения
+    start_of_week_str = start_of_week.strftime('%d %B %Y')
+    end_of_week_str = end_of_week.strftime('%d %B %Y')
+
+    # Заголовок
+    await update.message.reply_text(f"Домашние задания на неделю с {start_of_week_str} по {end_of_week_str}:\n")
+
+    all_week_homework = []
+    
+    # Проходим по дням недели
+    current_date = start_of_week
+    while current_date <= end_of_week:
+        day_str = current_date.strftime('%d')  # День
+        month_year_str = current_date.strftime('%B %Y')  # Месяц и год
+
+        # Проверяем, есть ли задания на этот день
+        if month_year_str in homework and day_str in homework[month_year_str]:
+            tasks = ', '.join(homework[month_year_str][day_str])
+            all_week_homework.append(f"{current_date.strftime('%A, %d %B')}: {tasks}")
+        else:
+            all_week_homework.append(f"{current_date.strftime('%A, %d %B')}: Нет домашних заданий.")
+
+        current_date += timedelta(days=1)  # Переход к следующему дню
+
+    if all_week_homework:
+        await update.message.reply_text("\n".join(all_week_homework))
+    else:
+        await update.message.reply_text("Нет домашних заданий на эту неделю.")
 # Основная функция
 def main():
     app = ApplicationBuilder().token("7568107888:AAE3V5xpJ2sL2SSUxS23vonRkkrLNnZPNwM").build()
@@ -456,7 +496,9 @@ def main():
     app.add_handler(edit_conv_handler)  # Добавление команды для редактирования домашних заданий
     app.add_handler(get_homework_handler)  
     app.add_handler(delete_conv_handler)
+    app.add_handler(CommandHandler("week", show_week_homework)) 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
