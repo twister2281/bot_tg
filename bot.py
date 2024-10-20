@@ -28,9 +28,17 @@ def init_month(month_year):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_status = context.user_data.get('status', USER)  # Получаем статус пользователя
     await update.message.reply_text(
-        f"Привет! Я бот для добавления и редактирования домашнего задания. "
-        f"Ты в статусе: {user_status}. Используй команды /add, /edit, чтобы добавлять или редактировать задания, "
-        "или /all, чтобы посмотреть все задания, или /get_homework, чтобы получить задание за конкретный день."
+        f"Привет! Я бот для добавления и редактирования домашнего задания.\n"
+        f"Ты в статусе: {user_status}.\n"
+        "Мои команды:\n\n"
+        "Редактирование (доступно только блатным, так сказать)\n"
+        "/add - добавить дз\n"
+        "/edit - редактировать выбранное дз\n"
+        "/delete - удалить дз\n\n"
+        "Посмотреть дз:\n"
+        "/all - получить задание на месяц\n"
+        "/week - получить задание на неделю\n"
+        "/get_homework - получить задание за конкретный день"
     )
 
 # Установка статуса пользователя
@@ -112,15 +120,15 @@ async def subject_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return DAY_INPUT
 
     context.user_data['subject'] = subject
-    await update.message.reply_text(f"Предмет {subject} выбран. Введи задание (максимум 20 символов):")
+    await update.message.reply_text(f"Предмет {subject} выбран. Введи задание (максимум 45 символов):")
     return TASK_INPUT
 
 # Обработка ввода задания
 async def task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task = update.message.text
 
-    if len(task) > 20:
-        await update.message.reply_text("Ошибка: задание не должно превышать 20 символов.")
+    if len(task) > 45:
+        await update.message.reply_text("Ошибка: задание не должно превышать 45 символов.")
         return TASK_INPUT
 
     month_year = context.user_data['month']
@@ -143,20 +151,22 @@ async def show_all_homework(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_date = get_current_month_year()
     current_month_year = current_date.strftime('%B %Y')
     if current_month_year in homework and homework[current_month_year]:
-        all_homework = []
+        all_homework = [f"**{current_month_year}**"]  # Жирный текст для месяца
         for day in range(1, 32):
             day_str = str(day)
             if day_str in homework[current_month_year]:
-                tasks = ', '.join(homework[current_month_year][day_str])
+                tasks = '\n'.join(homework[current_month_year][day_str])
                 all_homework.append(f"{day}: {tasks}")
-
+        
         if all_homework:
-            await update.message.reply_text(f"Все домашние задания на {current_month_year}:\n" + "\n".join(all_homework))
+            await update.message.reply_text("\n\n".join(all_homework), parse_mode='Markdown')
         else:
-            await update.message.reply_text(f"Нет домашних заданий на {current_month_year}.")
+            await update.message.reply_text(f"Нет домашних заданий на **{current_month_year}**.", parse_mode='Markdown')
     else:
-        await update.message.reply_text(f"Нет домашних заданий на {current_month_year}.")
+        await update.message.reply_text(f"Нет домашних заданий на **{current_month_year}**.", parse_mode='Markdown')
+
     await start(update, context)
+
 
 # Функция для получения домашней работы за конкретный день
 async def get_homework(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -292,15 +302,15 @@ async def edit_subject_selection(update: Update, context: ContextTypes.DEFAULT_T
         return EDIT_DAY_INPUT
 
     context.user_data['edit_subject'] = subject
-    await update.message.reply_text(f"Выбран предмет {subject}. Введи новое задание (максимум 20 символов):")
+    await update.message.reply_text(f"Выбран предмет {subject}. Введи новое задание (максимум 45 символов):")
     return EDIT_TASK_INPUT
 
 # Обработка ввода нового задания для редактирования
 async def edit_task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_task = update.message.text
 
-    if len(new_task) > 20:
-        await update.message.reply_text("Ошибка: задание не должно превышать 20 символов.")
+    if len(new_task) > 45:
+        await update.message.reply_text("Ошибка: задание не должно превышать 45 символов.")
         return EDIT_TASK_INPUT
 
     month_year = context.user_data['edit_month']
@@ -414,36 +424,27 @@ def get_week_range():
 
 # Функция для отображения домашнего задания на текущую неделю
 async def show_week_homework(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    start_of_week, end_of_week = get_week_range()
+    current_date = datetime.now()
+    start_of_week = current_date - timedelta(days=current_date.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
     
-    # Преобразуем даты в нужный формат для отображения
-    start_of_week_str = start_of_week.strftime('%d %B %Y')
-    end_of_week_str = end_of_week.strftime('%d %B %Y')
+    week_homework = [f"**{start_of_week.strftime('%B %Y')}**"]  # Жирный текст для месяца
+    for i in range(7):  # Проходим по дням недели
+        day = (start_of_week + timedelta(days=i)).day
+        day_str = str(day)
+        month_year = start_of_week.strftime('%B %Y')
 
-    # Заголовок
-    await update.message.reply_text(f"Домашние задания на неделю с {start_of_week_str} по {end_of_week_str}:\n")
-
-    all_week_homework = []
+        if month_year in homework and day_str in homework[month_year]:
+            tasks = '\n'.join(homework[month_year][day_str])
+            week_homework.append(f"{day}: {tasks}")
     
-    # Проходим по дням недели
-    current_date = start_of_week
-    while current_date <= end_of_week:
-        day_str = current_date.strftime('%d')  # День
-        month_year_str = current_date.strftime('%B %Y')  # Месяц и год
-
-        # Проверяем, есть ли задания на этот день
-        if month_year_str in homework and day_str in homework[month_year_str]:
-            tasks = ', '.join(homework[month_year_str][day_str])
-            all_week_homework.append(f"{current_date.strftime('%A, %d %B')}: {tasks}")
-        else:
-            all_week_homework.append(f"{current_date.strftime('%A, %d %B')}: Нет домашних заданий.")
-
-        current_date += timedelta(days=1)  # Переход к следующему дню
-
-    if all_week_homework:
-        await update.message.reply_text("\n".join(all_week_homework))
+    if week_homework:
+        await update.message.reply_text("\n\n".join(week_homework), parse_mode='Markdown')
     else:
-        await update.message.reply_text("Нет домашних заданий на эту неделю.")
+        await update.message.reply_text(f"Нет домашних заданий на текущую неделю.", parse_mode='Markdown')
+
+    await start(update, context)
+
 # Основная функция
 def main():
     app = ApplicationBuilder().token("7568107888:AAE3V5xpJ2sL2SSUxS23vonRkkrLNnZPNwM").build()
