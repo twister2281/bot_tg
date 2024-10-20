@@ -2,11 +2,6 @@ from babel.dates import format_date
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from datetime import datetime, timedelta
-import locale
-
-# Установка локали на русский язык
-locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
-
 # Состояния для команды /add, /edit и /get_homework
 MONTH_SELECTION, DAY_INPUT, SUBJECT_SELECTION, TASK_INPUT, MONTH_REQUEST, DAY_REQUEST, EDIT_MONTH_SELECTION, EDIT_DAY_INPUT, EDIT_SUBJECT_SELECTION, EDIT_TASK_INPUT = range(10)
 
