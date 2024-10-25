@@ -14,6 +14,9 @@ homework = {}
 ADMIN = 'Блатной'
 USER = 'Не блатной'
 
+#Коды ошибок
+ErrorWrongSubjectName = range(1)
+
 # Получение текущего месяца и года
 def get_current_month_year():
     now = datetime.now()
@@ -23,6 +26,10 @@ def get_current_month_year():
 def init_month(month_year):
     if month_year not in homework:
         homework[month_year] = {}
+
+#Вывод сообщения об ошибке
+async def errorHandler(update: Update, context: ContextTypes.DEFAULT_TYPE, errorCode : int):
+    await update.message.reply_text("Что-то пошло не так. Свяжитесь с тех. поддержкой.\nКод ошибки: {errorCode}")
 
 # Команда /start для приветствия
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,6 +71,7 @@ async def select_month(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(months_keyboard, one_time_keyboard=True)
     await update.message.reply_text("Выбери месяц:", reply_markup=reply_markup)
     return MONTH_SELECTION
+
 # Обработка выбора месяца для добавления домашнего задания
 async def month_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     selected_month = update.message.text
@@ -139,6 +147,7 @@ async def task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if day not in homework[month_year]:
         homework[month_year][day] = []
     homework[month_year][day].append(f"{subject}: {task}")
+    homework[month_year][day].sort()
 
     await update.message.reply_text(f"Задание по {subject} на {day} ({month_year}) добавлено: {task}")
 
@@ -228,6 +237,7 @@ async def day_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Выбор месяца для редактирования домашнего задания
 async def edit_select_month(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("edit_select_month")
     user_status = context.user_data.get('status', USER)
     if user_status != ADMIN:
         await update.message.reply_text("У вас нет прав для редактирования домашних заданий.")
@@ -247,6 +257,7 @@ async def edit_select_month(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Обработка выбора месяца для редактирования
 async def edit_month_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("edit_month_selection")
     selected_month = update.message.text
     current_date = get_current_month_year()
     month_year = current_date.strftime('%B %Y')
@@ -268,33 +279,39 @@ async def edit_month_selection(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # Обработка ввода дня для редактирования
 async def edit_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("edit_day_input")
+
     day = update.message.text
     month_year = context.user_data['edit_month']
 
+    #31 февраля - почему бы и нет
+    #надо будет посмотреть это в тестах
     if not day.isdigit() or int(day) < 1 or int(day) > 31:
         await update.message.reply_text("Ошибка: введите корректный день (от 1 до 31).")
         return EDIT_DAY_INPUT
 
     day_str = str(day)
 
-    if month_year in homework and day_str in homework[month_year]:
-        # Выводим текущие задания
-        tasks = homework[month_year][day_str]
-        await update.message.reply_text(f"Задания на {day} {month_year}:\n" + "\n".join(tasks) + "\n\nВыбери предмет для редактирования:")
-        
-        subjects_keyboard = list(set(task.split(':')[0] for task in tasks))  # Уникальные предметы
-        subjects_keyboard.append('Назад')
-        reply_markup = ReplyKeyboardMarkup([[subject] for subject in subjects_keyboard], one_time_keyboard=True)
-        await update.message.reply_text("Выбери предмет для редактирования:", reply_markup=reply_markup)
-        context.user_data['edit_day'] = day_str  # Сохраняем день для редактирования
-        return EDIT_SUBJECT_SELECTION
-    else:
+    if not (month_year in homework and day_str in homework[month_year]):
         await update.message.reply_text(f"Нет домашних заданий на {day} {month_year}.")
         await start(update, context)
         return ConversationHandler.END
+    
+    context.user_data['edit_day'] = day_str  # Сохраняем день для редактирования
+
+    # Выводим текущие задания
+    tasks = homework[month_year][day_str]
+    
+    subjects_keyboard = [task for task in tasks]  # Список с дз по предметам, task : "subject : task"
+    subjects_keyboard.append('Назад')
+    reply_markup = ReplyKeyboardMarkup([[subject] for subject in subjects_keyboard], one_time_keyboard=True)
+    await update.message.reply_text(f"Задания на {day} {month_year}:\n" + "\n".join(tasks) + "\n\nВыбери предмет для редактирования:", reply_markup=reply_markup)
+    return EDIT_SUBJECT_SELECTION
 
 # Обработка выбора предмета для редактирования
 async def edit_subject_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("edit_subject_selection")
+
     subject = update.message.text
 
     if subject == 'Назад':
@@ -307,23 +324,34 @@ async def edit_subject_selection(update: Update, context: ContextTypes.DEFAULT_T
 
 # Обработка ввода нового задания для редактирования
 async def edit_task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("edit_task_input")
     new_task = update.message.text
 
     if len(new_task) > 20:
-        await update.message.reply_text("Ошибка: задание не должно превышать 20 символов.")
+        await update.message.reply_text("Ошибка: задание не должно превышать 20 символов. Пожалуйста, введи заново")
         return EDIT_TASK_INPUT
 
     month_year = context.user_data['edit_month']
     day_str = context.user_data['edit_day']
     subject = context.user_data['edit_subject']
-
-    # Удаляем старое задание и добавляем новое
     tasks = homework[month_year][day_str]
-    homework[month_year][day_str] = [f"{subject}: {new_task}" if task.startswith(subject) else task for task in tasks]
 
-    await update.message.reply_text(f"Задание по {subject} на {day_str} ({month_year}) обновлено: {new_task}")
+    # Удаляем старое задание 
+    try:
+        tasks.remove(subject)
+    except ValueError:
+        await errorHandler(update, ContextTypes.DEFAULT_TYPE, ErrorWrongSubjectName)
+        await start(update, context)
+        return ConversationHandler.END
+
+    # и добавляем новое
+    tasks.append(f"{subject.split(':')[0]}: {new_task}")
+    tasks.sort()
+
+    await update.message.reply_text(f"Задание по {subject.split(':')[0]} на {day_str} ({month_year}) обновлено: {new_task}")
     await start(update, context)
     return ConversationHandler.END
+
 async def delete_select_month(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_status = context.user_data.get('status', USER)
     if user_status != ADMIN:
@@ -373,16 +401,16 @@ async def delete_day_selection(update: Update, context: ContextTypes.DEFAULT_TYP
         return DELETE_DAY_SELECTION
 
     day_str = str(day)
+    context.user_data['delete_day'] = day_str  # Сохраняем день для удаления
 
     if month_year in homework and day_str in homework[month_year]:
         tasks = homework[month_year][day_str]
         await update.message.reply_text(f"Задания на {day} {month_year}:\n" + "\n".join(tasks) + "\n\nВыбери предмет для удаления:")
 
-        subjects_keyboard = list(set(task.split(':')[0] for task in tasks))  # Уникальные предметы
+        subjects_keyboard = [task for task in tasks]  # Предметы
         subjects_keyboard.append('Назад')
         reply_markup = ReplyKeyboardMarkup([[subject] for subject in subjects_keyboard], one_time_keyboard=True)
         await update.message.reply_text("Выбери предмет для удаления:", reply_markup=reply_markup)
-        context.user_data['delete_day'] = day_str  # Сохраняем день для удаления
         return DELETE_SUBJECT_SELECTION
     else:
         await update.message.reply_text(f"Нет домашних заданий на {day} {month_year}.")
@@ -402,10 +430,15 @@ async def delete_subject_selection(update: Update, context: ContextTypes.DEFAULT
     # Удаление задания по предмету
     if month_year in homework and day_str in homework[month_year]:
         tasks = homework[month_year][day_str]
-        new_tasks = [task for task in tasks if not task.startswith(subject)]
-        
-        if new_tasks:
-            homework[month_year][day_str] = new_tasks
+        try:
+            tasks.remove(subject)
+        except ValueError:
+            await errorHandler(update, ContextTypes.DEFAULT_TYPE, ErrorWrongSubjectName)
+            await start(update, context)
+            return ConversationHandler.END
+
+        if tasks:
+            tasks.sort()
         else:
             del homework[month_year][day_str]  # Удаляем день, если больше нет заданий
 
@@ -416,6 +449,7 @@ async def delete_subject_selection(update: Update, context: ContextTypes.DEFAULT
     await start(update, context)
     return ConversationHandler.END
 
+#useless thing
 def get_week_range():
     now = datetime.now()
     start_of_week = now - timedelta(days=now.weekday())  # Понедельник текущей недели
@@ -425,14 +459,17 @@ def get_week_range():
 # Функция для отображения домашнего задания на текущую неделю
 async def show_week_homework(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_date = datetime.now()
-    start_of_week = current_date - timedelta(days=current_date.weekday())
-    end_of_week = start_of_week + timedelta(days=6)
+    start_of_week = current_date 
+    end_of_week = start_of_week + timedelta(days=7)
     
     week_homework = [f"**{start_of_week.strftime('%B %Y')}**"]  # Жирный текст для месяца
-    for i in range(7):  # Проходим по дням недели
+    for i in range(8):  # Проходим по дням недели
         day = (start_of_week + timedelta(days=i)).day
         day_str = str(day)
-        month_year = start_of_week.strftime('%B %Y')
+        month_year = (start_of_week + timedelta(days=i)).strftime('%B %Y')
+
+        if month_year != start_of_week.strftime('%B %Y') and not f"\n**{month_year}**" in week_homework:
+            week_homework.append(f"\n**{month_year}**")
 
         if month_year in homework and day_str in homework[month_year]:
             tasks = '\n'.join(homework[month_year][day_str])
