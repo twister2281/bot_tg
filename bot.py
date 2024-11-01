@@ -1,3 +1,4 @@
+from os import P_ALL
 from babel.dates import format_date
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
@@ -9,6 +10,26 @@ DELETE_MONTH_SELECTION, DELETE_DAY_SELECTION, DELETE_SUBJECT_SELECTION = range(1
 
 # Словарь для хранения домашних заданий по месяцам
 homework = {}
+
+# Максимальное количество символов в дз
+MAX_CHARS_COUNT = 50
+
+# Файлы хранения дз
+PATH_TO_DATA = "database/"
+MONTHS = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December"
+]
 
 # Определение статусов пользователей
 ADMIN = 'Блатной'
@@ -26,10 +47,55 @@ def get_current_month_year():
 def init_month(month_year):
     if month_year not in homework:
         homework[month_year] = {}
+        
+# Инициализация месячной структуры по дням
+def init_day(month_year, day):
+    if day not in homework[month_year]:
+        homework[month_year][day] = []
+        
+# Сохранение дз
+def save_homework():
+    september_month_date = datetime(2024, 9, 1) # Получаем месяц-отсчет -- сентябрь на 1 курс
+        
+    for month in homework.keys(): # для всех месяцев       
+        # Записываем в папку все дз
+        # Args:
+            # PATH_TO_DATA (str): путь на корневую папку с дз, в ней лежат txt каждого месяца
+            # data_base (TextIOWrapper): файл с дз на месяц
+        with open(f"{PATH_TO_DATA}{month.split()[0]}.txt", 'w') as data_base:
+            for day in homework[month]:            # для каждого day 
+                data_base.write(day + '\n')                     # записываем в файл
+                for task in homework[month][day]:  # для каждого дз task
+                    data_base.write(task + '\n')                # записываем в файл
+                data_base.write('\n')                           # разделитель для дз
 
-#Вывод сообщения об ошибке
+# Загрузка дз
+def load_homework():
+    september_month_date = datetime(2024, 9, 1)
+    
+    for month in range(12):
+        current_month_date = september_month_date + timedelta(days=31 * month)
+        current_month_year = current_month_date.strftime('%B %Y')
+        try:
+            with open(f"{PATH_TO_DATA}{current_month_year.split()[0]}.txt", 'r') as data_base:
+                while day := data_base.readline().strip():
+                    while (task := data_base.readline().strip()):
+                        
+                        init_month(current_month_year)
+                        init_day(current_month_year, day)
+                        
+                        homework[current_month_year][day].append(task)
+        except FileNotFoundError:
+            pass
+
+# Выход нахрен из бота ибо я заебался каждый раз перезапускать его в терминале
+async def quit_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Выход из бота\n")
+    exit(0)
+
+# Вывод сообщения об ошибке
 async def errorHandler(update: Update, context: ContextTypes.DEFAULT_TYPE, errorCode : int):
-    await update.message.reply_text("Что-то пошло не так. Свяжитесь с тех. поддержкой.\nКод ошибки: {errorCode}")
+    await update.message.reply_text("Что-то пошло не так. Свяжитесь с техподдержкой.\nКод ошибки: {errorCode}")
 
 # Команда /start для приветствия
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -38,7 +104,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Привет! Я бот для добавления и редактирования домашнего задания.\n"
         f"Ты в статусе: {user_status}.\n"
         "Мои команды:\n\n"
-        "Редактирование (доступно только блатным, так сказать)\n"
+        "Редактирование (необходимы права доступа)\n"
         "/add - добавить дз\n"
         "/edit - редактировать выбранное дз\n"
         "/delete - удалить дз\n\n"
@@ -59,7 +125,7 @@ async def select_month(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_status != ADMIN:
         await update.message.reply_text("У вас нет прав для добавления домашних заданий.")
         return ConversationHandler.END
-    
+
     current_date = get_current_month_year()
     current_month_year = current_date.strftime('%B %Y')
     months_keyboard = [
@@ -103,7 +169,7 @@ async def day_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if day == 'Назад':
         await select_month(update, context)
         return MONTH_SELECTION
-    
+
     if not day.isdigit() or int(day) < 1 or int(day) > 31:
         await update.message.reply_text("Ошибка: введите корректный день (от 1 до 31).")
         return DAY_INPUT
@@ -135,8 +201,8 @@ async def subject_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task = update.message.text
 
-    if len(task) > 20:
-        await update.message.reply_text("Ошибка: задание не должно превышать 20 символов.")
+    if len(task) > MAX_CHARS_COUNT:
+        await update.message.reply_text(f"Ошибка: задание не должно превышать {MAX_CHARS_COUNT} символов.")
         return TASK_INPUT
 
     month_year = context.user_data['month']
@@ -152,6 +218,7 @@ async def task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Задание по {subject} на {day} ({month_year}) добавлено: {task}")
 
     # Возврат на главную страницу
+    save_homework()
     await start(update, context)
     return ConversationHandler.END
 
@@ -166,7 +233,7 @@ async def show_all_homework(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if day_str in homework[current_month_year]:
                 tasks = '\n'.join(homework[current_month_year][day_str])
                 all_homework.append(f"{day}: {tasks}")
-        
+
         if all_homework:
             await update.message.reply_text("\n\n".join(all_homework), parse_mode='Markdown')
         else:
@@ -231,7 +298,7 @@ async def day_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Задания на {day} {month_year}:\n{tasks}")
     else:
         await update.message.reply_text(f"Нет домашних заданий на {day} {month_year}.")
-    
+
     await start(update, context)
     return ConversationHandler.END
 
@@ -242,7 +309,7 @@ async def edit_select_month(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_status != ADMIN:
         await update.message.reply_text("У вас нет прав для редактирования домашних заданий.")
         return ConversationHandler.END
-    
+
     current_date = get_current_month_year()
     current_month_year = current_date.strftime('%B %Y')
     months_keyboard = [
@@ -296,12 +363,12 @@ async def edit_day_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Нет домашних заданий на {day} {month_year}.")
         await start(update, context)
         return ConversationHandler.END
-    
+
     context.user_data['edit_day'] = day_str  # Сохраняем день для редактирования
 
     # Выводим текущие задания
     tasks = homework[month_year][day_str]
-    
+
     subjects_keyboard = [task for task in tasks]  # Список с дз по предметам, task : "subject : task"
     subjects_keyboard.append('Назад')
     reply_markup = ReplyKeyboardMarkup([[subject] for subject in subjects_keyboard], one_time_keyboard=True)
@@ -327,8 +394,8 @@ async def edit_task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("edit_task_input")
     new_task = update.message.text
 
-    if len(new_task) > 20:
-        await update.message.reply_text("Ошибка: задание не должно превышать 20 символов. Пожалуйста, введи заново")
+    if len(new_task) > MAX_CHARS_COUNT:
+        await update.message.reply_text(f"Ошибка: задание не должно превышать {MAX_CHARS_COUNT} символов. Пожалуйста, введи заново")
         return EDIT_TASK_INPUT
 
     month_year = context.user_data['edit_month']
@@ -336,7 +403,7 @@ async def edit_task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     subject = context.user_data['edit_subject']
     tasks = homework[month_year][day_str]
 
-    # Удаляем старое задание 
+    # Удаляем старое задание
     try:
         tasks.remove(subject)
     except ValueError:
@@ -347,6 +414,7 @@ async def edit_task_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # и добавляем новое
     tasks.append(f"{subject.split(':')[0]}: {new_task}")
     tasks.sort()
+    save_homework()
 
     await update.message.reply_text(f"Задание по {subject.split(':')[0]} на {day_str} ({month_year}) обновлено: {new_task}")
     await start(update, context)
@@ -357,7 +425,7 @@ async def delete_select_month(update: Update, context: ContextTypes.DEFAULT_TYPE
     if user_status != ADMIN:
         await update.message.reply_text("У вас нет прав для удаления домашних заданий.")
         return ConversationHandler.END
-    
+
     current_date = get_current_month_year()
     current_month_year = current_date.strftime('%B %Y')
     months_keyboard = [
@@ -445,7 +513,7 @@ async def delete_subject_selection(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text(f"Задание по {subject} на {day_str} ({month_year}) удалено.")
     else:
         await update.message.reply_text(f"Нет задания по {subject} на {day_str} {month_year}.")
-    
+
     await start(update, context)
     return ConversationHandler.END
 
@@ -459,9 +527,9 @@ def get_week_range():
 # Функция для отображения домашнего задания на текущую неделю
 async def show_week_homework(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_date = datetime.now()
-    start_of_week = current_date 
+    start_of_week = current_date
     end_of_week = start_of_week + timedelta(days=7)
-    
+
     week_homework = [f"**{start_of_week.strftime('%B %Y')}**"]  # Жирный текст для месяца
     for i in range(8):  # Проходим по дням недели
         day = (start_of_week + timedelta(days=i)).day
@@ -474,7 +542,7 @@ async def show_week_homework(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if month_year in homework and day_str in homework[month_year]:
             tasks = '\n'.join(homework[month_year][day_str])
             week_homework.append(f"{day}: {tasks}")
-    
+
     if week_homework:
         await update.message.reply_text("\n\n".join(week_homework), parse_mode='Markdown')
     else:
@@ -485,6 +553,8 @@ async def show_week_homework(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # Основная функция
 def main():
     app = ApplicationBuilder().token("7568107888:AAE3V5xpJ2sL2SSUxS23vonRkkrLNnZPNwM").build()
+    
+    load_homework()
 
     add_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("add", select_month)],
@@ -532,9 +602,10 @@ def main():
     app.add_handler(CommandHandler("all", show_all_homework))  # Команда для просмотра всех домашних заданий
     app.add_handler(add_conv_handler)
     app.add_handler(edit_conv_handler)  # Добавление команды для редактирования домашних заданий
-    app.add_handler(get_homework_handler)  
+    app.add_handler(get_homework_handler)
     app.add_handler(delete_conv_handler)
-    app.add_handler(CommandHandler("week", show_week_homework)) 
+    app.add_handler(CommandHandler("week", show_week_homework))
+    app.add_handler(CommandHandler("exit", quit_bot))
     app.run_polling()
 
 
