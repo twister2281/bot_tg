@@ -12,7 +12,7 @@ DELETE_MONTH_SELECTION, DELETE_DAY_SELECTION, DELETE_SUBJECT_SELECTION = range(1
 homework = {}
 
 # Максимальное количество символов в дз
-MAX_CHARS_COUNT = 500
+MAX_CHARS_COUNT = 550
 
 # Файлы хранения дз
 PATH_TO_DATA = "database/"
